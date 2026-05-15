@@ -57,7 +57,7 @@ You need a domain on Cloudflare with Email Routing turned on. After that:
 1. Generate the real bot keypair: `pnpm gen-bot-key --domain=mailenc.org --localpart=echo`
 2. Put the private key into Worker Secrets: `pnpm wrangler secret put BOT_PGP_PRIVATE`
 3. Paste the public key into `BOT_PGP_PUBLIC` in `wrangler.jsonc` (it's public, no need to hide it)
-4. `pnpm deploy`
+4. `pnpm run deploy`
 5. In the Cloudflare dashboard, add a catch-all Email Routing rule that sends to the `mailenc` worker. Catch-all is important: the `+token` aliases won't match a specific `echo@` rule.
 6. Sanity check that the bot's key is reachable: `gpg --auto-key-locate wkd --locate-keys echo@mailenc.org` should find it. If it doesn't, either the WKD endpoint isn't reachable from outside or `BOT_PGP_PUBLIC` isn't set.
 
