@@ -1,3 +1,5 @@
+import * as openpgp from "openpgp";
+
 import type { HkpsResult } from "./types.js";
 
 const KEYSERVER = "https://keys.openpgp.org";
@@ -23,6 +25,16 @@ export async function hkpsLookup(email: string): Promise<HkpsResult> {
     }
     if (!text.includes("BEGIN PGP PUBLIC KEY BLOCK")) {
       return { url, found: false, status: res.status, reason: "not an armored key" };
+    }
+    try {
+      await openpgp.readKey({ armoredKey: text });
+    } catch (err) {
+      return {
+        url,
+        found: false,
+        status: res.status,
+        reason: `not a valid OpenPGP key: ${err instanceof Error ? err.message : String(err)}`,
+      };
     }
     return { url, found: true, status: res.status, armored: text };
   } catch (err) {

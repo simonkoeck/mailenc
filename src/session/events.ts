@@ -35,10 +35,11 @@ export type SessionEvent =
       fingerprint?: string;
     }
   | { kind: "key-picked"; at: number; source: string; fingerprint: string; detail: string }
-  | { kind: "no-key-found"; at: number }
+  | { kind: "no-key-found"; at: number; reason?: string }
   | { kind: "signature-verified"; at: number; fingerprint: string }
   | { kind: "signature-unverified"; at: number; reason: string }
   | { kind: "reply-sent"; at: number; encrypted: boolean }
+  | { kind: "reply-failed"; at: number; reason: string }
   | { kind: "done"; at: number };
 
 export type SessionStatus = "awaiting" | "processing" | "done" | "expired";
@@ -50,4 +51,7 @@ export type SessionState = {
   createdAt: number;
   expiresAt: number;
   events: SessionEvent[];
+  privateKey: string;
+  publicKey: string;
+  fingerprint: string;
 };

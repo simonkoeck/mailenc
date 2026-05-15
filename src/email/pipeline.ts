@@ -8,7 +8,7 @@ import { wkdLookup } from "../discovery/wkd.js";
 import { bundle } from "../discovery/pick.js";
 import type { DiscoveryBundle } from "../discovery/types.js";
 import { getBotPrivateKey, getBotPublicKey } from "../pgp/bot-key.js";
-import { decryptArmored, verifyClearSignedAgainst } from "../pgp/decrypt.js";
+import { decryptArmored, verifyEmbeddedSignature } from "../pgp/decrypt.js";
 import { encryptAndSign } from "../pgp/encrypt.js";
 import type { KeySummary } from "../pgp/inspect.js";
 import { summarizeKey } from "../pgp/inspect.js";
@@ -38,6 +38,34 @@ function makeSink(env: Env, token: string | null): Sink {
       });
     } catch {}
   };
+}
+
+async function loadSessionPrivateKey(
+  env: Env,
+  token: string
+): Promise<openpgp.PrivateKey | null> {
+  const id = env.SESSION.idFromName(token);
+  const stub = env.SESSION.get(id);
+  const res = await stub.fetch("https://do/private-key");
+  if (!res.ok) return null;
+  const armored = await res.text();
+  if (!armored.includes("BEGIN PGP PRIVATE KEY")) return null;
+  try {
+    return await openpgp.readPrivateKey({ armoredKey: armored });
+  } catch {
+    return null;
+  }
+}
+
+async function loadDecryptionKey(
+  env: Env,
+  token: string | null
+): Promise<openpgp.PrivateKey> {
+  if (token) {
+    const sessionKey = await loadSessionPrivateKey(env, token);
+    if (sessionKey) return sessionKey;
+  }
+  return await getBotPrivateKey(env);
 }
 
 export async function handleIncoming(
@@ -78,16 +106,14 @@ export async function handleIncoming(
     protocol: payload.protocol,
   });
 
-  const botPriv = await getBotPrivateKey(env);
+  const botPriv = await loadDecryptionKey(env, token);
 
   let decryptOk = false;
   let decryptReason: string | undefined;
   let embeddedKeyIDs: string[] = [];
-  let decryptedMessage: openpgp.Message<string> | null = null;
   try {
     const r = await decryptArmored(payload.armored, botPriv);
     embeddedKeyIDs = r.signatureKeyIDs;
-    decryptedMessage = r.rawMessage;
     decryptOk = true;
     await emit({
       kind: "decrypted",
@@ -120,8 +146,8 @@ export async function handleIncoming(
         fingerprint: pickedSummary.fingerprint,
         detail: discovery.picked.detail,
       });
-      if (decryptOk && decryptedMessage && embeddedKeyIDs.length > 0) {
-        const verifyRes = await verifyClearSignedAgainst(decryptedMessage, key);
+      if (decryptOk && embeddedKeyIDs.length > 0) {
+        const verifyRes = await verifyEmbeddedSignature(payload.armored, botPriv, key);
         signature = verifyRes;
         if (verifyRes.verified) {
           await emit({
@@ -138,14 +164,20 @@ export async function handleIncoming(
         }
       }
     } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
       await emit({
         kind: "no-key-found",
         at: Date.now(),
+        reason: `picked ${discovery.picked.source} key would not parse: ${reason}`,
       });
       pickedSummary = null;
     }
   } else {
-    await emit({ kind: "no-key-found", at: Date.now() });
+    await emit({
+      kind: "no-key-found",
+      at: Date.now(),
+      reason: "no discovery source returned a usable key",
+    });
   }
 
   const reportInput: ReportInput = {
@@ -164,39 +196,43 @@ export async function handleIncoming(
   };
   const reportText = buildMarkdownReport(reportInput);
 
-  if (discovery.picked && pickedSummary) {
-    const recipientKey = discovery.picked.armored
-      ? await openpgp.readKey({ armoredKey: discovery.picked.armored })
-      : await openpgp.readKey({ binaryKey: discovery.picked.bytes! });
-    let encryptedArmored: string;
-    try {
-      encryptedArmored = await encryptAndSign(reportText, recipientKey, botPriv);
-    } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
+  try {
+    if (discovery.picked && pickedSummary) {
+      const recipientKey = discovery.picked.armored
+        ? await openpgp.readKey({ armoredKey: discovery.picked.armored })
+        : await openpgp.readKey({ binaryKey: discovery.picked.bytes! });
+      let encryptedArmored: string | null = null;
+      let encryptError: string | undefined;
+      try {
+        encryptedArmored = await encryptAndSign(reportText, recipientKey, botPriv);
+      } catch (err) {
+        encryptError = err instanceof Error ? err.message : String(err);
+      }
+      if (encryptedArmored) {
+        await sendEncryptedReply(message, env, parsed, encryptedArmored);
+        await emit({ kind: "reply-sent", at: Date.now(), encrypted: true });
+      } else {
+        await sendPlaintextReply(
+          message,
+          env,
+          parsed,
+          `${reportText}\n\n(We tried to encrypt this reply but failed: ${encryptError})`
+        );
+        await emit({ kind: "reply-sent", at: Date.now(), encrypted: false });
+      }
+    } else {
       await sendPlaintextReply(
         message,
         env,
         parsed,
-        `${reportText}\n\n(We tried to encrypt this reply but failed: ${reason})`
+        `${reportText}\n\n(No usable key was discoverable for your address, so this reply is in plaintext.)`
       );
-      await emit({
-        kind: "reply-sent",
-        at: Date.now(),
-        encrypted: false,
-      });
-      await emit({ kind: "done", at: Date.now() });
-      return;
+      await emit({ kind: "reply-sent", at: Date.now(), encrypted: false });
     }
-    await sendEncryptedReply(message, env, parsed, encryptedArmored);
-    await emit({ kind: "reply-sent", at: Date.now(), encrypted: true });
-  } else {
-    await sendPlaintextReply(
-      message,
-      env,
-      parsed,
-      `${reportText}\n\n(No usable key was discoverable for your address, so this reply is in plaintext.)`
-    );
-    await emit({ kind: "reply-sent", at: Date.now(), encrypted: false });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    console.error("reply failed:", reason);
+    await emit({ kind: "reply-failed", at: Date.now(), reason });
   }
 
   await emit({ kind: "done", at: Date.now() });
@@ -209,7 +245,7 @@ async function runDiscovery(
 ): Promise<DiscoveryBundle> {
   const [wkd, autocrypt, hkps] = await Promise.all([
     wkdLookup(sender),
-    Promise.resolve(parseAutocrypt(headers, sender)),
+    parseAutocrypt(headers, sender),
     hkpsLookup(sender),
   ]);
 
@@ -242,17 +278,20 @@ function attemptSummary(a: import("../discovery/types.js").WkdAttempt) {
   return { url: a.url, ok: a.ok, status: a.status, error: a.error };
 }
 
-function buildReplyHeaders(parsed: ParsedEmail, botFrom: string): ReplyHeaders {
+function buildReplyHeaders(
+  parsed: ParsedEmail,
+  botFrom: string,
+  originalSender: string
+): ReplyHeaders {
   const inReplyTo = headerValue(parsed, "Message-ID") || undefined;
   const refsExisting = headerValue(parsed, "References");
   const references = refsExisting && inReplyTo
     ? `${refsExisting} ${inReplyTo}`
     : inReplyTo;
-  const senderAddr = parsed.from?.address ?? "";
   const subject = `Re: ${parsed.subject ?? "Email Encryption Test"}`;
   return {
     from: botFrom,
-    to: senderAddr,
+    to: originalSender,
     subject,
     inReplyTo,
     references,
@@ -274,9 +313,9 @@ async function sendPlaintextReply(
   body: string
 ): Promise<void> {
   const botFrom = message.to;
-  const h = buildReplyHeaders(parsed, botFrom);
+  const h = buildReplyHeaders(parsed, botFrom, message.from);
   const raw = buildPlainReply(h, body, env.EMAIL_DOMAIN);
-  const reply = new EmailMessage(botFrom, h.to, raw);
+  const reply = new EmailMessage(botFrom, message.from, raw);
   await message.reply(reply);
 }
 
@@ -287,9 +326,9 @@ async function sendEncryptedReply(
   encryptedArmored: string
 ): Promise<void> {
   const botFrom = message.to;
-  const h = buildReplyHeaders(parsed, botFrom);
+  const h = buildReplyHeaders(parsed, botFrom, message.from);
   const raw = buildPgpMimeReply(h, encryptedArmored, env.EMAIL_DOMAIN);
-  const reply = new EmailMessage(botFrom, h.to, raw);
+  const reply = new EmailMessage(botFrom, message.from, raw);
   await message.reply(reply);
 }
 

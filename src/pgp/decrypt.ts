@@ -50,17 +50,21 @@ export type SignatureCheck = {
   reason?: string;
 };
 
-export async function verifyClearSignedAgainst(
-  signed: openpgp.Message<string>,
-  publicKey: openpgp.PublicKey
+export async function verifyEmbeddedSignature(
+  armoredMessage: string,
+  decryptionKey: openpgp.PrivateKey,
+  verificationKey: openpgp.PublicKey
 ): Promise<SignatureCheck> {
   try {
-    const result = await openpgp.verify({
-      message: signed,
-      verificationKeys: publicKey,
+    const message = await openpgp.readMessage({ armoredMessage });
+    const result = await openpgp.decrypt({
+      message,
+      decryptionKeys: decryptionKey,
+      verificationKeys: verificationKey,
+      format: "utf8",
     });
     if (result.signatures.length === 0) {
-      return { verified: false, reason: "no signatures" };
+      return { verified: false, reason: "no signatures inside encrypted payload" };
     }
     try {
       await result.signatures[0]!.verified;

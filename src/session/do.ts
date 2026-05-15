@@ -1,8 +1,34 @@
+import * as openpgp from "openpgp";
+
 import type { SessionEvent, SessionState, SessionStatus } from "./events.js";
 
 const TTL_MS = 60 * 60 * 1000;
 const STORAGE_KEY = "state";
 const MAX_EVENTS = 128;
+
+async function generateSessionKey(address: string): Promise<{
+  privateKey: string;
+  publicKey: string;
+  fingerprint: string;
+}> {
+  const { privateKey, publicKey } = await openpgp.generateKey({
+    type: "ecc",
+    curve: "curve25519Legacy",
+    userIDs: [{ name: "mailenc session", email: address }],
+    format: "armored",
+  });
+  const parsed = await openpgp.readKey({ armoredKey: publicKey });
+  return {
+    privateKey,
+    publicKey,
+    fingerprint: parsed.getFingerprint().toUpperCase(),
+  };
+}
+
+function publicView(state: SessionState) {
+  const { privateKey: _priv, ...rest } = state;
+  return rest;
+}
 
 type Env = {
   EMAIL_DOMAIN: string;
@@ -53,6 +79,12 @@ export class SessionDO {
       if (req.method === "GET" && url.pathname === "/stream") {
         return this.handleStream();
       }
+      if (req.method === "GET" && url.pathname === "/public-key") {
+        return this.handlePublicKey();
+      }
+      if (req.method === "GET" && url.pathname === "/private-key") {
+        return this.handlePrivateKey();
+      }
       return new Response("not found", { status: 404 });
     } catch (err) {
       return new Response(
@@ -66,22 +98,24 @@ export class SessionDO {
     const { token } = (await req.json()) as { token: string };
     const now = Date.now();
     if (this.data) {
-      return Response.json({ already: true, state: this.data });
+      return Response.json({ already: true, state: publicView(this.data) });
     }
     const address = `${this.env.BOT_LOCALPART}+${token}@${this.env.EMAIL_DOMAIN}`;
+    const keys = await generateSessionKey(address);
     this.data = {
       token,
       address,
       status: "awaiting",
       createdAt: now,
       expiresAt: now + TTL_MS,
-      events: [
-        { kind: "session-created", at: now, address },
-      ],
+      events: [{ kind: "session-created", at: now, address }],
+      privateKey: keys.privateKey,
+      publicKey: keys.publicKey,
+      fingerprint: keys.fingerprint,
     };
     await this.save();
-    await this.state.storage.setAlarm(this.data.expiresAt);
-    return Response.json({ already: false, state: this.data });
+    await this.state.storage.setAlarm(now + TTL_MS);
+    return Response.json({ already: false, state: publicView(this.data) });
   }
 
   private async handleEvent(req: Request): Promise<Response> {
@@ -112,7 +146,23 @@ export class SessionDO {
 
   private handleStateRead(): Response {
     if (!this.data) return new Response("not found", { status: 404 });
-    return Response.json(this.data);
+    return Response.json(publicView(this.data));
+  }
+
+  private handlePublicKey(): Response {
+    if (!this.data) return new Response("not found", { status: 404 });
+    return new Response(this.data.publicKey, {
+      status: 200,
+      headers: { "Content-Type": "application/pgp-keys; charset=utf-8" },
+    });
+  }
+
+  private handlePrivateKey(): Response {
+    if (!this.data) return new Response("not found", { status: 404 });
+    return new Response(this.data.privateKey, {
+      status: 200,
+      headers: { "Content-Type": "application/pgp-keys; charset=utf-8" },
+    });
   }
 
   private handleStream(): Response {
@@ -123,10 +173,11 @@ export class SessionDO {
       try {
         await writer.write(this.encoder.encode(": connected\n\n"));
         if (this.data) {
+          const safe = publicView(this.data);
           await this.writeEvent(
             writer,
             "snapshot",
-            { state: { ...this.data, events: [] }, events: this.data.events }
+            { state: { ...safe, events: [] }, events: safe.events }
           );
         }
       } catch {

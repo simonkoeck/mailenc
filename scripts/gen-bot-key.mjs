@@ -18,7 +18,7 @@ console.error(`Generating Ed25519 + Curve25519 keypair for <${email}>…`);
 
 const { privateKey, publicKey } = await openpgp.generateKey({
   type: "ecc",
-  curve: "curve25519",
+  curve: "curve25519Legacy",
   userIDs: [{ name, email }],
   format: "armored",
 });

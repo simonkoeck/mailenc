@@ -1,3 +1,5 @@
+import * as openpgp from "openpgp";
+
 import { wkdHash } from "../util/zbase32.js";
 import type { WkdAttempt, WkdResult } from "./types.js";
 
@@ -46,7 +48,18 @@ async function fetchKey(url: string): Promise<WkdAttempt> {
     if (buf.byteLength > MAX_KEY_BYTES) {
       return { url, ok: false, status: res.status, error: "key too large" };
     }
-    return { url, ok: true, status: res.status, bytes: new Uint8Array(buf) };
+    const u8 = new Uint8Array(buf);
+    try {
+      await openpgp.readKey({ binaryKey: u8 });
+    } catch (err) {
+      return {
+        url,
+        ok: false,
+        status: res.status,
+        error: `not a valid OpenPGP key: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    return { url, ok: true, status: res.status, bytes: u8 };
   } catch (err) {
     return { url, ok: false, error: err instanceof Error ? err.message : String(err) };
   } finally {

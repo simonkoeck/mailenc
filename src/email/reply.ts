@@ -35,14 +35,20 @@ function commonHeaders(h: ReplyHeaders, fromDomain: string): string[] {
   return lines;
 }
 
+function toCrlf(s: string): string {
+  return s.replace(/\r\n/g, "\n").replace(/\n/g, "\r\n");
+}
+
 export function buildPlainReply(h: ReplyHeaders, body: string, fromDomain: string): string {
-  return [
-    ...commonHeaders(h, fromDomain),
-    "Content-Type: text/plain; charset=utf-8",
-    "Content-Transfer-Encoding: 8bit",
-    "",
-    body,
-  ].join("\r\n");
+  return toCrlf(
+    [
+      ...commonHeaders(h, fromDomain),
+      "Content-Type: text/plain; charset=utf-8",
+      "Content-Transfer-Encoding: 8bit",
+      "",
+      body,
+    ].join("\r\n")
+  );
 }
 
 export function buildPgpMimeReply(
@@ -51,25 +57,27 @@ export function buildPgpMimeReply(
   fromDomain: string
 ): string {
   const boundary = `b_${crypto.randomUUID().replace(/-/g, "")}`;
-  return [
-    ...commonHeaders(h, fromDomain),
-    `Content-Type: multipart/encrypted; protocol="application/pgp-encrypted"; boundary="${boundary}"`,
-    "",
-    "This is an OpenPGP/MIME encrypted message (RFC 3156).",
-    "",
-    `--${boundary}`,
-    "Content-Type: application/pgp-encrypted",
-    "Content-Description: PGP/MIME version identification",
-    "",
-    "Version: 1",
-    "",
-    `--${boundary}`,
-    'Content-Type: application/octet-stream; name="encrypted.asc"',
-    "Content-Description: OpenPGP encrypted message",
-    'Content-Disposition: inline; filename="encrypted.asc"',
-    "",
-    encryptedArmored,
-    "",
-    `--${boundary}--`,
-  ].join("\r\n");
+  return toCrlf(
+    [
+      ...commonHeaders(h, fromDomain),
+      `Content-Type: multipart/encrypted; protocol="application/pgp-encrypted"; boundary="${boundary}"`,
+      "",
+      "This is an OpenPGP/MIME encrypted message (RFC 3156).",
+      "",
+      `--${boundary}`,
+      "Content-Type: application/pgp-encrypted",
+      "Content-Description: PGP/MIME version identification",
+      "",
+      "Version: 1",
+      "",
+      `--${boundary}`,
+      'Content-Type: application/octet-stream; name="encrypted.asc"',
+      "Content-Description: OpenPGP encrypted message",
+      'Content-Disposition: inline; filename="encrypted.asc"',
+      "",
+      encryptedArmored,
+      "",
+      `--${boundary}--`,
+    ].join("\r\n")
+  );
 }

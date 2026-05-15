@@ -67,7 +67,7 @@ const HANDLERS = {
       d.at
     ),
   "no-key-found": (d) =>
-    addEvent("no reply key", "reply will be plaintext", "warn", d.at),
+    addEvent("no reply key", d.reason || "reply will be plaintext", "warn", d.at),
   "signature-verified": (d) =>
     addEvent("signature verified", `fp ${shortFp(d.fingerprint)}`, "ok", d.at),
   "signature-unverified": (d) =>
@@ -84,6 +84,8 @@ const HANDLERS = {
       d.encrypted ? "ok" : "warn",
       d.at
     ),
+  "reply-failed": (d) =>
+    addEvent("reply send failed", d.reason || "unknown", "fail", d.at),
   done: (d) => {
     addEvent("verification complete", "transmission ended", "done", d.at);
     setPill("complete", "complete");
@@ -166,10 +168,8 @@ function paintAddress(address) {
   }
 }
 
-function setBotKeyLinks(address) {
-  const at = address.indexOf("@");
-  const domain = at >= 0 ? address.slice(at + 1) : "";
-  const href = `https://${domain}/bot-key.asc`;
+function setBotKeyLinks(token) {
+  const href = `/api/session/${token}/key.asc`;
   if (botKeyLink) botKeyLink.href = href;
   if (botKeyInline) botKeyInline.href = href;
 }
@@ -190,25 +190,10 @@ function startTtlCountdown(expiresAt) {
   setInterval(update, 1000);
 }
 
-async function start() {
-  setPill("connecting", "booting");
-  let res;
-  try {
-    res = await fetch("/api/session", { method: "POST" });
-  } catch (err) {
-    setPill("error", "offline");
-    addressEl.textContent = "could not reach worker";
-    return;
-  }
-  if (!res.ok) {
-    setPill("error", "session failed");
-    addressEl.textContent = "could not create session";
-    return;
-  }
-  const { token, address } = await res.json();
+function wireSession(token, address, expiresAt) {
   paintAddress(address);
-  setBotKeyLinks(address);
-  startTtlCountdown(Date.now() + 60 * 60 * 1000);
+  setBotKeyLinks(token);
+  startTtlCountdown(expiresAt);
   copyBtn.disabled = false;
   copyBtn.onclick = async () => {
     try {
@@ -224,6 +209,49 @@ async function start() {
     }
   };
   openStream(token);
+}
+
+async function tryRestore() {
+  const hashToken = (location.hash || "").replace(/^#/, "");
+  if (!/^[a-z0-9]{8}$/.test(hashToken)) return false;
+  try {
+    const res = await fetch(`/api/session/${hashToken}`);
+    if (!res.ok) return false;
+    const state = await res.json();
+    if (!state || state.status === "expired") return false;
+    wireSession(hashToken, state.address, state.expiresAt);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+document.getElementById("rotate")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  history.replaceState(null, "", "/");
+  location.reload();
+});
+
+async function start() {
+  setPill("connecting", "booting");
+  if (await tryRestore()) return;
+
+  let res;
+  try {
+    res = await fetch("/api/session", { method: "POST" });
+  } catch {
+    setPill("error", "offline");
+    addressEl.textContent = "could not reach worker";
+    return;
+  }
+  if (!res.ok) {
+    setPill("error", "session failed");
+    addressEl.textContent = "could not create session";
+    return;
+  }
+  const { token, address } = await res.json();
+  history.replaceState(null, "", `#${token}`);
+  wireSession(token, address, Date.now() + 60 * 60 * 1000);
 }
 
 const seenEvents = new Set();

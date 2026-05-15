@@ -1,3 +1,5 @@
+import * as openpgp from "openpgp";
+
 import type { AutocryptResult } from "./types.js";
 
 type AutocryptParams = { addr?: string; keydata?: string; preferEncrypt?: string };
@@ -26,7 +28,10 @@ function base64Decode(s: string): Uint8Array {
 
 export type RawHeader = { key: string; value: string };
 
-export function parseAutocrypt(headers: RawHeader[], senderAddr: string): AutocryptResult {
+export async function parseAutocrypt(
+  headers: RawHeader[],
+  senderAddr: string
+): Promise<AutocryptResult> {
   const want = senderAddr.toLowerCase();
   const matches: AutocryptParams[] = [];
   for (const h of headers) {
@@ -40,18 +45,27 @@ export function parseAutocrypt(headers: RawHeader[], senderAddr: string): Autocr
     return { found: false, reason: "no Autocrypt header matched sender" };
   }
   const last = matches[matches.length - 1]!;
+  let bytes: Uint8Array;
   try {
-    const bytes = base64Decode(last.keydata!);
-    return {
-      found: true,
-      addr: last.addr,
-      preferEncrypt: last.preferEncrypt,
-      bytes,
-    };
+    bytes = base64Decode(last.keydata!);
   } catch (err) {
     return {
       found: false,
       reason: `base64 decode failed: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
+  try {
+    await openpgp.readKey({ binaryKey: bytes });
+  } catch (err) {
+    return {
+      found: false,
+      reason: `Autocrypt keydata is not a valid OpenPGP key: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+  return {
+    found: true,
+    addr: last.addr,
+    preferEncrypt: last.preferEncrypt,
+    bytes,
+  };
 }
