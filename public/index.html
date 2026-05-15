@@ -4,11 +4,41 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#0d0e0a" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f6efde" media="(prefers-color-scheme: light)" />
+
+    <title>mailenc · PGP email encryption test (WKD, Autocrypt, HKPS)</title>
     <meta
       name="description"
-      content="A PGP email round-trip test. Send an encrypted email, watch the verification live, get an encrypted echo back."
+      content="Free, end-to-end PGP email test. Send an encrypted email, watch the verification live, get an encrypted echo report back. Checks WKD, Autocrypt and HKPS key discovery, signature verification, and PGP/MIME envelope handling."
     />
-    <title>mailenc — pgp email round-trip test</title>
+    <meta name="author" content="Simon Köck" />
+    <link rel="canonical" href="https://mailenc.org/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="mailenc" />
+    <meta property="og:title" content="mailenc · PGP email encryption test" />
+    <meta
+      property="og:description"
+      content="Does your encrypted email actually work? Send a PGP-encrypted message, watch the live verification, get an encrypted echo back. WKD, Autocrypt and HKPS key discovery, all in one round-trip."
+    />
+    <meta property="og:url" content="https://mailenc.org/" />
+    <meta property="og:image" content="https://mailenc.org/og.svg" />
+    <meta property="og:image:type" content="image/svg+xml" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="mailenc — PGP email round-trip test" />
+    <meta property="og:locale" content="en_US" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="mailenc · PGP email encryption test" />
+    <meta
+      name="twitter:description"
+      content="Send a PGP-encrypted email, watch the live verification, get an encrypted echo back. Checks WKD, Autocrypt and HKPS."
+    />
+    <meta name="twitter:image" content="https://mailenc.org/og.svg" />
+    <meta name="twitter:image:alt" content="mailenc — PGP email round-trip test" />
+
     <link
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='27' font-size='28' fill='%23ff8a3c'%3E%E2%AC%A2%3C/text%3E%3C/svg%3E"
@@ -20,6 +50,34 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/style.css" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "mailenc",
+        "alternateName": "Email Encryption Test",
+        "url": "https://mailenc.org/",
+        "description": "Free PGP email round-trip test. Sends a PGP-encrypted echo report back, verifying encryption, signatures, and key discovery via WKD, Autocrypt, and HKPS.",
+        "applicationCategory": "DeveloperApplication",
+        "applicationSubCategory": "SecurityApplication",
+        "operatingSystem": "Web",
+        "browserRequirements": "Requires JavaScript and EventSource (SSE) support",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "creator": {
+          "@type": "Person",
+          "name": "Simon Köck",
+          "url": "https://github.com/simonkoeck"
+        },
+        "codeRepository": "https://github.com/simonkoeck/mailenc",
+        "license": "https://opensource.org/licenses/MIT",
+        "keywords": "PGP, OpenPGP, GPG, email encryption, WKD, Autocrypt, HKPS, S/MIME alternative, encrypted email test"
+      }
+    </script>
   </head>
   <body>
     <div class="grain" aria-hidden="true"></div>

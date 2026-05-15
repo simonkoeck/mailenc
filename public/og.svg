@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" role="img" aria-label="mailenc — PGP email round-trip test">
+  <defs>
+    <radialGradient id="ember-glow" cx="92%" cy="-5%" r="55%">
+      <stop offset="0%" stop-color="#ff8a3c" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#ff8a3c" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#2d3025" stroke-width="0.6" opacity="0.4"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="630" fill="#0d0e0a"/>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+  <rect width="1200" height="630" fill="url(#ember-glow)"/>
+
+  <g stroke="#ff8a3c" stroke-width="2" fill="none">
+    <path d="M 60 60 L 60 90 M 60 60 L 90 60"/>
+    <path d="M 1140 570 L 1140 540 M 1140 570 L 1110 570"/>
+  </g>
+
+  <text x="90" y="148" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="22" fill="#ff8a3c" letter-spacing="6">PGP EMAIL ROUND-TRIP TEST</text>
+
+  <g transform="translate(90, 220)">
+    <text font-family="Georgia, 'IBM Plex Serif', serif" font-size="92" font-weight="500" fill="#f0e6c8">
+      <tspan x="0" dy="0">Does your <tspan font-style="italic" fill="#ff8a3c">encrypted email</tspan></tspan>
+      <tspan x="0" dy="110">actually work?</tspan>
+    </text>
+  </g>
+
+  <g transform="translate(90, 480)">
+    <text font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="22" fill="#7e7560" letter-spacing="3">SEND TO</text>
+    <text y="58" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="48" font-weight="500" fill="#f0e6c8">echo<tspan fill="#ff8a3c">+ab12cd34</tspan>@mailenc.org</text>
+  </g>
+
+  <g transform="translate(1040, 110)" font-family="ui-monospace, monospace">
+    <text font-size="80" fill="#ff8a3c">⬢</text>
+    <text x="-2" y="115" font-size="24" fill="#c7baa1" font-weight="500" letter-spacing="2">mailenc</text>
+  </g>
+</svg>
