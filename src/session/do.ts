@@ -2,6 +2,7 @@ import type { SessionEvent, SessionState, SessionStatus } from "./events.js";
 
 const TTL_MS = 60 * 60 * 1000;
 const STORAGE_KEY = "state";
+const MAX_EVENTS = 128;
 
 type Env = {
   EMAIL_DOMAIN: string;
@@ -86,6 +87,9 @@ export class SessionDO {
   private async handleEvent(req: Request): Promise<Response> {
     const ev = (await req.json()) as SessionEvent;
     if (!this.data) return new Response("no session", { status: 404 });
+    if (this.data.events.length >= MAX_EVENTS) {
+      return Response.json({ ok: false, dropped: "event cap reached" });
+    }
     this.data.events.push(ev);
     if (ev.kind === "email-received" && this.data.status === "awaiting") {
       this.data.status = "processing";

@@ -6,27 +6,32 @@ export type ReplyHeaders = {
   references?: string;
 };
 
+function stripCtl(s: string): string {
+  return s.replace(/[\r\n\0\x01-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "");
+}
+
 function encodeSubject(s: string): string {
-  if (/^[\x20-\x7e]*$/.test(s)) return s;
-  const bytes = new TextEncoder().encode(s);
+  const safe = stripCtl(s);
+  if (/^[\x20-\x7e]*$/.test(safe)) return safe;
+  const bytes = new TextEncoder().encode(safe);
   let bin = "";
   for (const b of bytes) bin += String.fromCharCode(b);
   return `=?UTF-8?B?${btoa(bin)}?=`;
 }
 
 function commonHeaders(h: ReplyHeaders, fromDomain: string): string[] {
-  const messageId = `<${crypto.randomUUID()}@${fromDomain}>`;
+  const messageId = `<${crypto.randomUUID()}@${stripCtl(fromDomain)}>`;
   const date = new Date().toUTCString();
   const lines = [
     `Message-ID: ${messageId}`,
     `Date: ${date}`,
-    `From: ${h.from}`,
-    `To: ${h.to}`,
+    `From: ${stripCtl(h.from)}`,
+    `To: ${stripCtl(h.to)}`,
     `Subject: ${encodeSubject(h.subject)}`,
     "MIME-Version: 1.0",
   ];
-  if (h.inReplyTo) lines.push(`In-Reply-To: ${h.inReplyTo}`);
-  if (h.references) lines.push(`References: ${h.references}`);
+  if (h.inReplyTo) lines.push(`In-Reply-To: ${stripCtl(h.inReplyTo)}`);
+  if (h.references) lines.push(`References: ${stripCtl(h.references)}`);
   return lines;
 }
 

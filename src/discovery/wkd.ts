@@ -4,10 +4,21 @@ import type { WkdAttempt, WkdResult } from "./types.js";
 const FETCH_TIMEOUT_MS = 5000;
 const MAX_KEY_BYTES = 256 * 1024;
 
+const DOMAIN_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
+
 export async function wkdUrls(email: string): Promise<{ advanced: string; direct: string }> {
   const at = email.lastIndexOf("@");
+  if (at <= 0 || at === email.length - 1) {
+    throw new Error("invalid email: no localpart/domain");
+  }
   const localpart = email.slice(0, at);
   const domain = email.slice(at + 1).toLowerCase();
+  if (!DOMAIN_RE.test(domain)) {
+    throw new Error(`invalid sender domain: ${domain.slice(0, 64)}`);
+  }
+  if (domain.length > 253) {
+    throw new Error("sender domain too long");
+  }
   const hash = await wkdHash(localpart);
   const l = encodeURIComponent(localpart);
   return {
@@ -44,7 +55,16 @@ async function fetchKey(url: string): Promise<WkdAttempt> {
 }
 
 export async function wkdLookup(email: string): Promise<WkdResult> {
-  const { advanced, direct } = await wkdUrls(email);
-  const [a, d] = await Promise.all([fetchKey(advanced), fetchKey(direct)]);
+  let urls: { advanced: string; direct: string };
+  try {
+    urls = await wkdUrls(email);
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    return {
+      advanced: { url: "", ok: false, error },
+      direct: { url: "", ok: false, error },
+    };
+  }
+  const [a, d] = await Promise.all([fetchKey(urls.advanced), fetchKey(urls.direct)]);
   return { advanced: a, direct: d };
 }

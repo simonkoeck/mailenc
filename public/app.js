@@ -226,6 +226,17 @@ async function start() {
   openStream(token);
 }
 
+const seenEvents = new Set();
+
+function rememberAndRender(name, data) {
+  const key = `${name}|${data.at ?? ""}`;
+  if (seenEvents.has(key)) return false;
+  seenEvents.add(key);
+  const h = HANDLERS[name];
+  if (h) h(data);
+  return true;
+}
+
 function openStream(token) {
   const sse = new EventSource(`/api/session/${token}/stream`);
 
@@ -234,21 +245,20 @@ function openStream(token) {
   sse.addEventListener("snapshot", (e) => {
     try {
       const data = JSON.parse(e.data);
-      for (const ev of data.events ?? []) {
-        const h = HANDLERS[ev.kind];
-        if (h) h(ev);
-      }
+      for (const ev of data.events ?? []) rememberAndRender(ev.kind, ev);
     } catch (err) {
       console.warn("snapshot parse failed", err);
     }
   });
 
-  for (const [name, fn] of Object.entries(HANDLERS)) {
+  for (const name of Object.keys(HANDLERS)) {
     sse.addEventListener(name, (e) => {
       try {
         const data = JSON.parse(e.data);
-        fn(data);
-        if (name === "email-received") setPill("live", "live · verifying");
+        const rendered = rememberAndRender(name, data);
+        if (rendered && name === "email-received") {
+          setPill("live", "live · verifying");
+        }
       } catch (err) {
         console.warn(name, "parse failed", err);
       }
