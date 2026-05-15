@@ -1,171 +1,70 @@
-# mailenc
+📨 **mailenc**
 
-A PGP email round-trip test, hosted on a single Cloudflare Worker.
+A little tool that tells you whether your PGP email setup actually works end to end.
 
-Visit the website, get a one-shot address like `echo+ab12cd34@mailenc.org`,
-send a PGP-encrypted email to it from your mail client, and watch the
-verification run live on the page. The bot mails back an encrypted echo
-report — encrypted to whichever public key it found for you, signed with
-its own key.
+You visit the site, get a one-shot address like `echo+ab12cd34@mailenc.org`, and send a PGP-encrypted email to it from whatever client you normally use. The verification streams live to the page while it runs. A couple of seconds later you get an encrypted echo reply, encrypted to whatever public key the bot could find for you (via WKD, Autocrypt, or HKPS), signed by the bot.
 
-The point: prove end-to-end that *your* setup works. Real client, real
-SMTP, real key discovery.
+So instead of wondering if you set everything up right, you just send a real email and get a real answer.
 
 ## What gets checked
 
-| Step | What |
-| --- | --- |
-| Encryption envelope | Did you send PGP/MIME or inline PGP? |
-| Decryption | Can the bot decrypt with its private key? |
-| Embedded signature | Is the message signed inside the encrypted payload? |
-| WKD (advanced) | `openpgpkey.<your-domain>/.well-known/openpgpkey/<your-domain>/hu/<hash>` |
-| WKD (direct) | `<your-domain>/.well-known/openpgpkey/hu/<hash>` |
-| Autocrypt | The `Autocrypt:` header your client sets |
-| HKPS | `keys.openpgp.org` lookup by your address |
-| Reply key | Which discovery source the bot used to encrypt the reply |
-| Signature verification | Does your embedded signature verify against the discovered key? |
+When your email lands, the bot walks through:
 
-Reply preference: **WKD > Autocrypt > HKPS**. If nothing is found, the
-reply is plaintext with an explanation in the body.
+- whether the envelope is PGP/MIME or inline PGP at all
+- whether it can decrypt with its private key
+- whether the message was signed inside the encrypted payload
+- whether your domain publishes a key via WKD (both the advanced and direct paths)
+- whether the `Autocrypt:` header is set on the message
+- whether keys.openpgp.org has a key for your address
+- which of those sources it ended up using to encrypt the reply
+- whether the embedded signature verifies against that key
+
+If more than one source has a key, the bot prefers WKD, then Autocrypt, then HKPS. If nothing usable turns up, the reply goes back in plaintext with a short note explaining why.
 
 ## Stack
 
-- Cloudflare Workers (one `fetch` + one `email` handler)
-- Cloudflare Email Routing (catch-all rule → this Worker)
-- Workers Static Assets for the website
-- One Durable Object per session (live SSE fan-out to the browser)
-- `openpgp` 6.x for crypto, `postal-mime` for MIME
+One Cloudflare Worker does everything. The `fetch` handler serves the site and a small JSON API. The `email` handler receives incoming mail through Cloudflare Email Routing and runs the pipeline. There's a Durable Object per session that holds the event log and fans it out to the browser over SSE. Crypto is `openpgp` 6.x, MIME parsing is `postal-mime`. The frontend is plain HTML, CSS and JS with no build step.
 
-## Project layout
-
-```
-src/
-  index.ts                 Worker entry; exports fetch, email, SessionDO
-  env.ts                   Env binding interface
-  api/
-    routes.ts              URL switch
-    session.ts             POST /api/session + state + stream forwarding
-    wkd-serve.ts           Bot's own WKD endpoint
-  email/
-    handler.ts             email() entry, schedules pipeline via waitUntil
-    parse.ts               postal-mime wrapper + PGP payload extraction
-    pipeline.ts            decrypt → discover → encrypt → reply
-    reply.ts               Build RFC 5322 + RFC 3156 reply bodies
-    report.ts              Markdown + JSON appendix report
-  discovery/
-    wkd.ts                 Advanced + direct WKD fetch
-    hkps.ts                keys.openpgp.org VKS
-    autocrypt.ts           Header parser
-    pick.ts                Ranking
-    types.ts               Shared types
-  pgp/
-    bot-key.ts             Load + cache bot keys from env
-    decrypt.ts             openpgp.decrypt wrapper
-    encrypt.ts             openpgp.encrypt + signing
-    inspect.ts             Key summary for the report
-  session/
-    do.ts                  SessionDO (state, alarm, SSE fan-out)
-    events.ts              Discriminated union of pipeline events
-  util/
-    zbase32.ts             WKD localpart hashing (SHA-1 + z-base-32)
-    token.ts               8-char session token
-public/
-  index.html               Landing page
-  app.js                   SSE timeline renderer
-  style.css                Styles
-scripts/
-  gen-bot-key.mjs          One-shot keypair generator
-```
-
-## Local development
+## Running it locally
 
 ```
 pnpm install
 pnpm typecheck
-pnpm dev                   # http://127.0.0.1:8788
+pnpm dev
 ```
 
-For the bot to serve its own WKD route locally, generate a keypair and
-drop it into `.dev.vars`:
+The site runs at http://127.0.0.1:8788. Local dev only exercises the HTTP side, since Cloudflare Email Routing only delivers mail to deployed Workers.
+
+If you want the bot to actually serve its key from the local WKD endpoint, generate a test keypair:
 
 ```
 node scripts/gen-bot-key.mjs --domain=mailenc.org --localpart=echo
 ```
 
-The script prints both keys. Put them into `.dev.vars` as
-single-line dotenv values (replace newlines with `\n`):
+The script prints both keys. Drop them into `.dev.vars` as single-line dotenv values (newlines as `\n`):
 
 ```
 BOT_PGP_PRIVATE="-----BEGIN PGP PRIVATE KEY BLOCK-----\n\n...\n-----END PGP PRIVATE KEY BLOCK-----"
 BOT_PGP_PUBLIC="-----BEGIN PGP PUBLIC KEY BLOCK-----\n\n...\n-----END PGP PUBLIC KEY BLOCK-----"
 ```
 
-Restart `pnpm dev` after editing `.dev.vars`.
+Restart `pnpm dev` after you edit `.dev.vars`.
 
-The email handler can't be exercised locally — Cloudflare Email Routing
-runs against the deployed Worker only. Local dev only covers the HTTP
-surface (site, API, WKD).
+## Deploying
 
-## Deploy
+You need a domain on Cloudflare with Email Routing turned on. After that:
 
-Prerequisites: `mailenc.org` (or whatever domain) on Cloudflare with
-Email Routing enabled.
-
-1. **Generate the bot keypair**
-
-   ```
-   pnpm gen-bot-key --domain=mailenc.org --localpart=echo
-   ```
-
-2. **Store the private key as a Worker Secret**
-
-   ```
-   pnpm wrangler secret put BOT_PGP_PRIVATE
-   ```
-
-   Paste the armored block when prompted.
-
-3. **Put the public key in `wrangler.jsonc`**
-
-   Replace `BOT_PGP_PUBLIC` under `vars` with the armored public key
-   (it's public — no need for a secret).
-
-4. **Deploy**
-
-   ```
-   pnpm deploy
-   ```
-
-5. **Wire up Email Routing**
-
-   In the Cloudflare dashboard, under Email > Email Routing > Routing
-   rules, add a **catch-all** rule with action *Send to a Worker* →
-   pick `mailenc`. Catch-all is required so `echo+<token>@mailenc.org`
-   resolves; specific `echo@` rules won't match the plus-aliased tokens.
-
-6. **Verify**
-
-   ```
-   gpg --auto-key-locate wkd --locate-keys echo@mailenc.org
-   ```
-
-   This should fetch and import the bot's public key over WKD. If it
-   doesn't, the bot's WKD endpoint isn't reachable — check that the
-   Worker is bound to the domain and `BOT_PGP_PUBLIC` is set.
+1. Generate the real bot keypair: `pnpm gen-bot-key --domain=mailenc.org --localpart=echo`
+2. Put the private key into Worker Secrets: `pnpm wrangler secret put BOT_PGP_PRIVATE`
+3. Paste the public key into `BOT_PGP_PUBLIC` in `wrangler.jsonc` (it's public, no need to hide it)
+4. `pnpm deploy`
+5. In the Cloudflare dashboard, add a catch-all Email Routing rule that sends to the `mailenc` worker. Catch-all is important: the `+token` aliases won't match a specific `echo@` rule.
+6. Sanity check that the bot's key is reachable: `gpg --auto-key-locate wkd --locate-keys echo@mailenc.org` should find it. If it doesn't, either the WKD endpoint isn't reachable from outside or `BOT_PGP_PUBLIC` isn't set.
 
 ## Privacy
 
-- No email contents are stored after the report is sent. The Durable
-  Object holds only the event log (booleans, key fingerprints, URLs),
-  not the body.
-- Sessions auto-delete one hour after creation via a DO alarm.
-- The bot's private key lives in Worker Secrets (encrypted at rest by
-  Cloudflare). Rotate by re-running `gen-bot-key` and putting the new
-  secret.
+The Durable Object holds event metadata: booleans, key fingerprints, URLs that were tried. No email body, subject, or attachment content sticks around after the reply goes out. Sessions delete themselves an hour after they're created via a DO alarm. The bot's private key lives in Worker Secrets, encrypted at rest by Cloudflare. To rotate, regenerate and `wrangler secret put` again.
 
-## Why a fresh address per visit?
+## Why a fresh address per visit
 
-So the website can show *your* result live. The token in
-`echo+<token>@mailenc.org` is the session ID — the email handler routes
-the result to the matching Durable Object, which fans out the event
-stream to the browser tab that's holding it open.
+So the page can show your result live. The token in `echo+<token>@mailenc.org` is the session id. When the email handler is done with your message, it pushes the result into the Durable Object for that token, which is already streaming to your browser tab.

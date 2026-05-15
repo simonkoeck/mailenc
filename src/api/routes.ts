@@ -4,7 +4,7 @@ import {
   getSessionState,
   openSessionStream,
 } from "./session.js";
-import { handlePolicy, handleWkdHu } from "./wkd-serve.js";
+import { handleBotKeyDownload, handlePolicy, handleWkdHu } from "./wkd-serve.js";
 
 const SESSION_STREAM = /^\/api\/session\/([a-z0-9]+)\/stream$/;
 const SESSION_STATE = /^\/api\/session\/([a-z0-9]+)$/;
@@ -31,6 +31,10 @@ export async function route(req: Request, env: Env): Promise<Response> {
 
   if (method === "GET" && path === "/.well-known/openpgpkey/policy") {
     return handlePolicy();
+  }
+
+  if (method === "GET" && path === "/bot-key.asc") {
+    return await handleBotKeyDownload(env);
   }
 
   const wkdMatch = WKD_HU.exec(path);

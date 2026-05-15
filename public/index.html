@@ -3,73 +3,149 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Email Encryption Test</title>
+    <meta name="color-scheme" content="dark light" />
+    <meta
+      name="description"
+      content="A PGP email round-trip test. Send an encrypted email, watch the verification live, get an encrypted echo back."
+    />
+    <title>mailenc — pgp email round-trip test</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='27' font-size='28' fill='%23ff8a3c'%3E%E2%AC%A2%3C/text%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Serif:ital,wght@0,500;0,600;1,400;1,500&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
-    <header>
-      <h1>Email encryption test</h1>
-      <p class="lede">
-        Send a PGP-encrypted email to the address below. We verify the
-        encryption, look up your public key via <strong>WKD</strong>,
-        <strong>Autocrypt</strong>, and <strong>HKPS</strong>, then mail an
-        encrypted echo report back to you.
-      </p>
+    <div class="grain" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <a class="brand" href="/">
+        <span class="brand__mark" aria-hidden="true">⬢</span>
+        <span class="brand__name">mailenc</span>
+        <span class="brand__tag">v0.1</span>
+      </a>
+      <div class="status-pill" id="status-pill" data-state="connecting">
+        <span class="status-pill__dot" aria-hidden="true"></span>
+        <span class="status-pill__label" id="status-pill-label">booting</span>
+      </div>
     </header>
 
     <main>
-      <section class="card" id="address-card">
-        <h2>Your test address</h2>
-        <div class="address-row">
-          <code id="address">loading…</code>
-          <button id="copy" type="button" disabled>Copy</button>
-        </div>
-        <p class="muted">
-          Valid for 1 hour. Reload for a fresh address. Anyone with the address
-          can email it &mdash; results show below in real time.
+      <section class="hero">
+        <p class="kicker">pgp email round-trip test</p>
+        <h1>
+          Does your <em>encrypted email</em><br />
+          actually&nbsp;work?
+        </h1>
+        <p class="lede">
+          Send a PGP-encrypted email to the one-shot address below. We verify
+          the envelope, look up your public key via <strong>WKD</strong>,
+          <strong>Autocrypt</strong> and <strong>HKPS</strong>, then mail an
+          encrypted echo report back to you. Watch it run.
         </p>
       </section>
 
-      <section class="card" id="timeline-card">
-        <h2>Live verification</h2>
+      <section class="card card--framed address-card" aria-labelledby="addr-label">
+        <header class="card__head">
+          <span class="card__label" id="addr-label">your address</span>
+          <span class="card__hint" id="ttl">valid 1h</span>
+        </header>
+
+        <div class="address-row">
+          <code id="address" aria-live="polite">────────────────</code>
+          <button id="copy" type="button" disabled aria-label="copy address">
+            <span aria-hidden="true">⎘</span>
+            <span class="copy-text">copy</span>
+          </button>
+        </div>
+
+        <footer class="card__foot">
+          <a href="/" id="rotate">↻ new address</a>
+          <span class="sep" aria-hidden="true">·</span>
+          <a id="bot-key-link" href="/bot-key.asc">⇣ my public key</a>
+          <span class="sep" aria-hidden="true">·</span>
+          <span class="muted">reload anytime</span>
+        </footer>
+      </section>
+
+      <section class="card timeline-card" aria-labelledby="tl-label">
+        <header class="card__head">
+          <span class="card__label" id="tl-label">live verification</span>
+          <span class="card__hint">log feed</span>
+        </header>
         <ol id="timeline" aria-live="polite">
-          <li class="waiting">Waiting for your email&hellip;</li>
+          <li class="row row--waiting">
+            <span class="row__time">--:--:--</span>
+            <span class="row__tag" data-tag="··">··</span>
+            <span class="row__title">awaiting your email</span>
+            <span class="row__detail">no transmission yet</span>
+          </li>
         </ol>
       </section>
 
-      <section class="card" id="howto">
-        <h2>How to test</h2>
-        <ol class="howto-list">
+      <section class="card howto-card" aria-labelledby="ht-label">
+        <header class="card__head">
+          <span class="card__label" id="ht-label">how to test</span>
+          <span class="card__hint">documentation</span>
+        </header>
+        <ol class="howto">
           <li>
-            <strong>Have a PGP keypair</strong> in your mail client. Thunderbird
-            (built-in OpenPGP), Mailvelope, GPG Suite, K-9 Mail, Proton Mail
-            Bridge, or plain <code>gpg</code> + <code>msmtp</code> all work.
+            <span class="howto__num">01</span>
+            <div class="howto__body">
+              <strong>Have a PGP keypair</strong> in your mail client.
+              Thunderbird (built-in OpenPGP), Mailvelope, GPG Suite, K-9 Mail,
+              Proton Mail Bridge, or plain <code>gpg</code> +
+              <code>msmtp</code> all work.
+            </div>
           </li>
           <li>
-            <strong>Encrypt to my key.</strong> Most clients fetch it via WKD
-            automatically. You can also
-            <a id="bot-key-link" href="#">download my public key directly</a>.
+            <span class="howto__num">02</span>
+            <div class="howto__body">
+              <strong>Encrypt to my key.</strong> Most clients fetch it via WKD
+              automatically. You can also
+              <a id="bot-key-inline" href="/bot-key.asc">download it</a>.
+            </div>
           </li>
           <li>
-            <strong>Make your own key discoverable</strong> via at least one of:
-            <ul>
-              <li>WKD at your domain (advanced or direct method)</li>
-              <li>The <code>Autocrypt:</code> header your client probably sends</li>
-              <li>Upload to <a href="https://keys.openpgp.org">keys.openpgp.org</a></li>
-            </ul>
+            <span class="howto__num">03</span>
+            <div class="howto__body">
+              <strong>Make your own key discoverable</strong> via at least one
+              of:
+              <ul class="howto__sub">
+                <li>WKD on your domain (advanced or direct method)</li>
+                <li>The <code>Autocrypt:</code> header your client probably sends</li>
+                <li>
+                  Upload to
+                  <a href="https://keys.openpgp.org">keys.openpgp.org</a>
+                </li>
+              </ul>
+            </div>
           </li>
           <li>
-            <strong>Send</strong> a PGP-encrypted email to the address above. We
-            preserve the <code>+token</code>, so just reply-to or paste it in.
+            <span class="howto__num">04</span>
+            <div class="howto__body">
+              <strong>Send</strong> the encrypted email to the address above.
+              We preserve the <code>+token</code> so the result streams back
+              into <em>this</em> browser tab.
+            </div>
           </li>
         </ol>
       </section>
     </main>
 
-    <footer>
-      <p class="muted">
-        Open source &middot; runs on Cloudflare Workers &middot; no email
-        contents stored after the report is sent.
+    <footer class="site-footer">
+      <p>
+        <span>runs on cloudflare workers</span>
+        <span class="sep" aria-hidden="true">·</span>
+        <span>no contents stored</span>
+        <span class="sep" aria-hidden="true">·</span>
+        <span><a href="https://github.com/simonkoeck/mailenc" rel="noopener">github ↗</a></span>
       </p>
     </footer>
 
