@@ -6,12 +6,20 @@ You visit the site, get a one-shot address like `echo+ab12cd34@mailenc.org`, and
 
 So instead of wondering if you set everything up right, you just send a real email and get a real answer.
 
+## How sessions work
+
+Every time you open the site, the worker generates a fresh PGP keypair just for your visit and publishes the public half over WKD at the matching `echo+<token>@mailenc.org` address. That means your mail client's normal "discover keys online" flow works without any extra setup: it queries `mailenc.org`, finds a key with a UID that matches the recipient, and lets you encrypt.
+
+The token also doubles as your session id. It lives in the URL hash, so reloading the page brings you back to the same address with the same event log. Click "↻ new address" to throw the old session away and mint a new one.
+
+Static `echo@mailenc.org` also works if you do not want the live page, with the bot's long-lived key at `/bot-key.asc`.
+
 ## What gets checked
 
 When your email lands, the bot walks through:
 
 - whether the envelope is PGP/MIME or inline PGP at all
-- whether it can decrypt with its private key
+- whether it can decrypt with the session's private key (or the static bot key for non-tokenised addresses)
 - whether the message was signed inside the encrypted payload
 - whether your domain publishes a key via WKD (both the advanced and direct paths)
 - whether the `Autocrypt:` header is set on the message
@@ -19,11 +27,11 @@ When your email lands, the bot walks through:
 - which of those sources it ended up using to encrypt the reply
 - whether the embedded signature verifies against that key
 
-If more than one source has a key, the bot prefers WKD, then Autocrypt, then HKPS. If nothing usable turns up, the reply goes back in plaintext with a short note explaining why.
+Each discovery source is validated by actually parsing the returned bytes as an OpenPGP key. A server that returns `HTTP 200 "Nothing here"` for a WKD path counts as a miss, not a hit. If more than one source has a real key, the bot prefers WKD, then Autocrypt, then HKPS. If nothing usable turns up, the reply goes back in plaintext with a short note explaining why.
 
 ## Stack
 
-One Cloudflare Worker does everything. The `fetch` handler serves the site and a small JSON API. The `email` handler receives incoming mail through Cloudflare Email Routing and runs the pipeline. There's a Durable Object per session that holds the event log and fans it out to the browser over SSE. Crypto is `openpgp` 6.x, MIME parsing is `postal-mime`. The frontend is plain HTML, CSS and JS with no build step.
+One Cloudflare Worker does everything. The `fetch` handler serves the site, a small JSON API, the per-session WKD endpoint, and the static bot key. The `email` handler receives incoming mail through Cloudflare Email Routing and runs the pipeline. There's a Durable Object per session that holds the keypair, the event log, and the SSE fan-out to your browser tab. Crypto is `openpgp` 6.x (legacy Curve25519 keys for GnuPG 2.4 / Thunderbird RNP interop), MIME parsing is `postal-mime`. The frontend is plain HTML, CSS and JS with no build step.
 
 ## Running it locally
 
@@ -35,13 +43,13 @@ pnpm dev
 
 The site runs at http://127.0.0.1:8788. Local dev only exercises the HTTP side, since Cloudflare Email Routing only delivers mail to deployed Workers.
 
-If you want the bot to actually serve its key from the local WKD endpoint, generate a test keypair:
+Per-session keys generate themselves automatically on each `/api/session` call. If you also want the static bot key (`echo@mailenc.org`, `/bot-key.asc`, WKD for `echo`), generate one:
 
 ```
 node scripts/gen-bot-key.mjs --domain=mailenc.org --localpart=echo
 ```
 
-The script prints both keys. Drop them into `.dev.vars` as single-line dotenv values (newlines as `\n`):
+Drop the output into `.dev.vars` as single-line dotenv values (newlines as `\n`):
 
 ```
 BOT_PGP_PRIVATE="-----BEGIN PGP PRIVATE KEY BLOCK-----\n\n...\n-----END PGP PRIVATE KEY BLOCK-----"
@@ -54,17 +62,26 @@ Restart `pnpm dev` after you edit `.dev.vars`.
 
 You need a domain on Cloudflare with Email Routing turned on. After that:
 
-1. Generate the real bot keypair: `pnpm gen-bot-key --domain=mailenc.org --localpart=echo`
+1. Generate the static bot keypair: `pnpm gen-bot-key --domain=mailenc.org --localpart=echo`
 2. Put the private key into Worker Secrets: `pnpm wrangler secret put BOT_PGP_PRIVATE`
 3. Paste the public key into `BOT_PGP_PUBLIC` in `wrangler.jsonc` (it's public, no need to hide it)
 4. `pnpm run deploy`
-5. In the Cloudflare dashboard, add a catch-all Email Routing rule that sends to the `mailenc` worker. Catch-all is important: the `+token` aliases won't match a specific `echo@` rule.
-6. Sanity check that the bot's key is reachable: `gpg --auto-key-locate wkd --locate-keys echo@mailenc.org` should find it. If it doesn't, either the WKD endpoint isn't reachable from outside or `BOT_PGP_PUBLIC` isn't set.
+5. In the Cloudflare dashboard, add a **catch-all** Email Routing rule that sends to the `mailenc` worker. Catch-all is required: the `+token` aliases won't match a specific `echo@` rule.
+6. Sanity check the static key is reachable:
+   ```
+   gpg --auto-key-locate wkd --locate-keys echo@mailenc.org
+   ```
+   If that imports the static key, your WKD endpoint works.
+7. Sanity check the per-session flow: open the site, grab a fresh address, then in another terminal:
+   ```
+   gpg --auto-key-locate wkd --locate-keys 'echo+<your-token>@mailenc.org'
+   ```
+   You should see `imported: 1` with a UID containing the per-session token.
+
+For debugging, `pnpm wrangler tail` streams live worker logs from production. Useful when something silently misbehaves and the timeline cannot tell you why.
 
 ## Privacy
 
-The Durable Object holds event metadata: booleans, key fingerprints, URLs that were tried. No email body, subject, or attachment content sticks around after the reply goes out. Sessions delete themselves an hour after they're created via a DO alarm. The bot's private key lives in Worker Secrets, encrypted at rest by Cloudflare. To rotate, regenerate and `wrangler secret put` again.
+The Durable Object stores three things: the per-session keypair (lifetime: one hour), the event log (booleans, fingerprints, URLs), and the address. No email body, subject, or attachment content sticks around after the reply goes out. The hour TTL is enforced by a DO alarm that wipes everything when it fires. The static bot key lives in Worker Secrets, encrypted at rest by Cloudflare. To rotate it, regenerate and `wrangler secret put BOT_PGP_PRIVATE` again.
 
-## Why a fresh address per visit
-
-So the page can show your result live. The token in `echo+<token>@mailenc.org` is the session id. When the email handler is done with your message, it pushes the result into the Durable Object for that token, which is already streaming to your browser tab.
+Per-session private keys live in DO storage, also encrypted at rest. Each one is unique to a single browser tab opening the site, and you can rotate by just reloading.
