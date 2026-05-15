@@ -1,0 +1,34 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mailenc",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-05-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+  "vars": {
+    "EMAIL_DOMAIN": "mailenc.org",
+    "BOT_LOCALPART": "echo",
+    "BOT_PGP_PUBLIC": "REPLACE_WITH_ARMORED_PUBLIC_KEY"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SESSION",
+        "class_name": "SessionDO"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["SessionDO"]
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

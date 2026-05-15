@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Email Encryption Test</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Email encryption test</h1>
+      <p class="lede">
+        Send a PGP-encrypted email to the address below. We verify the
+        encryption, look up your public key via <strong>WKD</strong>,
+        <strong>Autocrypt</strong>, and <strong>HKPS</strong>, then mail an
+        encrypted echo report back to you.
+      </p>
+    </header>
+
+    <main>
+      <section class="card" id="address-card">
+        <h2>Your test address</h2>
+        <div class="address-row">
+          <code id="address">loading…</code>
+          <button id="copy" type="button" disabled>Copy</button>
+        </div>
+        <p class="muted">
+          Valid for 1 hour. Reload for a fresh address. Anyone with the address
+          can email it &mdash; results show below in real time.
+        </p>
+      </section>
+
+      <section class="card" id="timeline-card">
+        <h2>Live verification</h2>
+        <ol id="timeline" aria-live="polite">
+          <li class="waiting">Waiting for your email&hellip;</li>
+        </ol>
+      </section>
+
+      <section class="card" id="howto">
+        <h2>How to test</h2>
+        <ol class="howto-list">
+          <li>
+            <strong>Have a PGP keypair</strong> in your mail client. Thunderbird
+            (built-in OpenPGP), Mailvelope, GPG Suite, K-9 Mail, Proton Mail
+            Bridge, or plain <code>gpg</code> + <code>msmtp</code> all work.
+          </li>
+          <li>
+            <strong>Encrypt to my key.</strong> Most clients fetch it via WKD
+            automatically. You can also
+            <a id="bot-key-link" href="#">download my public key directly</a>.
+          </li>
+          <li>
+            <strong>Make your own key discoverable</strong> via at least one of:
+            <ul>
+              <li>WKD at your domain (advanced or direct method)</li>
+              <li>The <code>Autocrypt:</code> header your client probably sends</li>
+              <li>Upload to <a href="https://keys.openpgp.org">keys.openpgp.org</a></li>
+            </ul>
+          </li>
+          <li>
+            <strong>Send</strong> a PGP-encrypted email to the address above. We
+            preserve the <code>+token</code>, so just reply-to or paste it in.
+          </li>
+        </ol>
+      </section>
+    </main>
+
+    <footer>
+      <p class="muted">
+        Open source &middot; runs on Cloudflare Workers &middot; no email
+        contents stored after the report is sent.
+      </p>
+    </footer>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
