@@ -312,7 +312,7 @@ async function sendPlaintextReply(
   parsed: ParsedEmail,
   body: string
 ): Promise<void> {
-  const botFrom = message.to;
+  const botFrom = `${env.BOT_LOCALPART}@${env.EMAIL_DOMAIN}`;
   const h = buildReplyHeaders(parsed, botFrom, message.from);
   const raw = buildPlainReply(h, body, env.EMAIL_DOMAIN);
   const reply = new EmailMessage(botFrom, message.from, raw);
@@ -325,7 +325,7 @@ async function sendEncryptedReply(
   parsed: ParsedEmail,
   encryptedArmored: string
 ): Promise<void> {
-  const botFrom = message.to;
+  const botFrom = `${env.BOT_LOCALPART}@${env.EMAIL_DOMAIN}`;
   const h = buildReplyHeaders(parsed, botFrom, message.from);
   const raw = buildPgpMimeReply(h, encryptedArmored, env.EMAIL_DOMAIN);
   const reply = new EmailMessage(botFrom, message.from, raw);
