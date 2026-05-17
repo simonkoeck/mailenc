@@ -19,6 +19,12 @@
       "/.well-known/openpgpkey/*"
     ]
   },
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "remote": true
+    }
+  ],
   "vars": {
     "EMAIL_DOMAIN": "mailenc.org",
     "BOT_LOCALPART": "echo",

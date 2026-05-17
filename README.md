@@ -60,19 +60,23 @@ Restart `pnpm dev` after you edit `.dev.vars`.
 
 ## Deploying
 
-You need a domain on Cloudflare with Email Routing turned on. After that:
+You need a domain on Cloudflare with Email Routing and Email Sending turned on.
+Email Sending is required for outbound replies: it requires Workers Paid,
+arbitrary-recipient sending, and the separate verified `cf-bounce`
+SPF/DKIM/MX records. After that:
 
 1. Generate the static bot keypair: `pnpm gen-bot-key --domain=mailenc.org --localpart=echo`
 2. Put the private key into Worker Secrets: `pnpm wrangler secret put BOT_PGP_PRIVATE`
 3. Paste the public key into `BOT_PGP_PUBLIC` in `wrangler.jsonc` (it's public, no need to hide it)
-4. `pnpm run deploy`
-5. In the Cloudflare dashboard, add a **catch-all** Email Routing rule that sends to the `mailenc` worker. Catch-all is required: the `+token` aliases won't match a specific `echo@` rule.
-6. Sanity check the static key is reachable:
+4. Onboard `mailenc.org` under Email Sending and wait until the sending records are verified.
+5. `pnpm run deploy`
+6. In the Cloudflare dashboard, add a **catch-all** Email Routing rule that sends to the `mailenc` worker. Catch-all is required: the `+token` aliases won't match a specific `echo@` rule.
+7. Sanity check the static key is reachable:
    ```
    gpg --auto-key-locate wkd --locate-keys echo@mailenc.org
    ```
    If that imports the static key, your WKD endpoint works.
-7. Sanity check the per-session flow: open the site, grab a fresh address, then in another terminal:
+8. Sanity check the per-session flow: open the site, grab a fresh address, then in another terminal:
    ```
    gpg --auto-key-locate wkd --locate-keys 'echo+<your-token>@mailenc.org'
    ```

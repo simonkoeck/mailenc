@@ -75,7 +75,7 @@ export async function handleIncoming(
   const parsed = await parseRaw(message.raw);
   const headers = headersToArray(parsed);
   const sender = parsed.from?.address ?? message.from;
-  const recipient = parsed.to?.[0]?.address ?? message.to;
+  const recipient = incomingBotAddress(parsed, message);
   const subject = parsed.subject ?? "(no subject)";
   const token = extractTokenFromAddress(recipient, env.BOT_LOCALPART);
   const emit = makeSink(env, token);
@@ -281,7 +281,7 @@ function attemptSummary(a: import("../discovery/types.js").WkdAttempt) {
 function buildReplyHeaders(
   parsed: ParsedEmail,
   botFrom: string,
-  originalSender: string
+  replyRecipient: string
 ): ReplyHeaders {
   const inReplyTo = headerValue(parsed, "Message-ID") || undefined;
   const refsExisting = headerValue(parsed, "References");
@@ -291,7 +291,7 @@ function buildReplyHeaders(
   const subject = `Re: ${parsed.subject ?? "Email Encryption Test"}`;
   return {
     from: botFrom,
-    to: originalSender,
+    to: replyRecipient,
     subject,
     inReplyTo,
     references,
@@ -306,17 +306,41 @@ function headerValue(parsed: ParsedEmail, name: string): string | undefined {
   return undefined;
 }
 
+function addressOf(a: ParsedEmail["from"]): string | undefined {
+  if (!a) return undefined;
+  if ("address" in a && typeof a.address === "string") return a.address;
+  const firstGroupAddress = a.group?.find((m) => m.address)?.address;
+  return firstGroupAddress || undefined;
+}
+
+function firstAddressOf(addrs: ParsedEmail["replyTo"]): string | undefined {
+  for (const a of addrs ?? []) {
+    const addr = addressOf(a);
+    if (addr) return addr;
+  }
+  return undefined;
+}
+
+function replyRecipient(parsed: ParsedEmail, message: ForwardableEmailMessage): string {
+  return firstAddressOf(parsed.replyTo) ?? addressOf(parsed.from) ?? message.from;
+}
+
+function incomingBotAddress(parsed: ParsedEmail, message: ForwardableEmailMessage): string {
+  return firstAddressOf(parsed.to) ?? message.to;
+}
+
 async function sendPlaintextReply(
   message: ForwardableEmailMessage,
   env: Env,
   parsed: ParsedEmail,
   body: string
 ): Promise<void> {
-  const botFrom = `${env.BOT_LOCALPART}@${env.EMAIL_DOMAIN}`;
-  const h = buildReplyHeaders(parsed, botFrom, message.from);
+  const botFrom = incomingBotAddress(parsed, message);
+  const to = replyRecipient(parsed, message);
+  const h = buildReplyHeaders(parsed, botFrom, to);
   const raw = buildPlainReply(h, body, env.EMAIL_DOMAIN);
-  const reply = new EmailMessage(botFrom, message.from, raw);
-  await message.reply(reply);
+  const reply = new EmailMessage(botFrom, to, raw);
+  await env.EMAIL.send(reply);
 }
 
 async function sendEncryptedReply(
@@ -325,11 +349,12 @@ async function sendEncryptedReply(
   parsed: ParsedEmail,
   encryptedArmored: string
 ): Promise<void> {
-  const botFrom = `${env.BOT_LOCALPART}@${env.EMAIL_DOMAIN}`;
-  const h = buildReplyHeaders(parsed, botFrom, message.from);
+  const botFrom = incomingBotAddress(parsed, message);
+  const to = replyRecipient(parsed, message);
+  const h = buildReplyHeaders(parsed, botFrom, to);
   const raw = buildPgpMimeReply(h, encryptedArmored, env.EMAIL_DOMAIN);
-  const reply = new EmailMessage(botFrom, message.from, raw);
-  await message.reply(reply);
+  const reply = new EmailMessage(botFrom, to, raw);
+  await env.EMAIL.send(reply);
 }
 
 // Avoid unused-import warning during isolated-module compilation

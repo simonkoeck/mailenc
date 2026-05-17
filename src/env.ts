@@ -1,5 +1,6 @@
 export interface Env {
   ASSETS: Fetcher;
+  EMAIL: SendEmail;
   SESSION: DurableObjectNamespace;
   EMAIL_DOMAIN: string;
   BOT_LOCALPART: string;
